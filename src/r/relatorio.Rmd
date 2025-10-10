@@ -1,0 +1,519 @@
+---
+title: "Sistema de Gestão de Produção Agrícola"
+subtitle: "Relatório Executivo de Análise de Desempenho"
+author: "Sistema de Análise Agrícola"
+date: "`r format(Sys.Date(), '%d de %B de %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+    css: style.css
+  pdf_document:
+    toc: true
+    number_sections: true
+    latex_engine: xelatex
+params:
+  data_file: "../data/agricultural_data_*.csv"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, 
+  message = FALSE, 
+  warning = FALSE,
+  fig.width = 12,
+  fig.height = 8
+)
+
+# Carregamento das bibliotecas
+suppressPackageStartupMessages({
+  library(readr)
+  library(dplyr)
+  library(ggplot2)
+  library(lubridate)
+  library(scales)
+  library(knitr)
+  library(DT)
+  library(plotly)
+})
+```
+
+```{r load-data, include=FALSE}
+# Função para encontrar o arquivo mais recente
+find_latest_csv <- function(pattern = "agricultural_data_") {
+  data_dir <- "../data"
+  
+  if (!dir.exists(data_dir)) {
+    return(NULL)
+  }
+  
+  files <- list.files(data_dir, pattern = paste0(pattern, ".*\\.csv"), full.names = TRUE)
+  
+  if (length(files) == 0) {
+    return(NULL)
+  }
+  
+  return(files[which.max(file.mtime(files))])
+}
+
+# Carrega dados
+csv_file <- find_latest_csv()
+
+if (is.null(csv_file)) {
+  stop("❌ Arquivo CSV não encontrado! Execute export_csv.py primeiro.")
+}
+
+data <- read_csv(csv_file, show_col_types = FALSE)
+
+# Conversão de datas
+data$planting_date <- as.Date(data$planting_date, format = "%Y-%m-%d")
+data$harvest_date <- as.Date(data$harvest_date, format = "%Y-%m-%d")
+data$created_at <- as.Date(data$created_at, format = "%Y-%m-%d")
+
+# Configuração do tema ggplot
+theme_set(theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 11, face = "bold"),
+    legend.title = element_text(size = 11, face = "bold"),
+    panel.grid.minor = element_blank()
+  ))
+```
+
+# 🌾 Resumo Executivo
+
+Este relatório apresenta uma análise abrangente da produção agrícola baseada em **`r nrow(data)` registros** de produção coletados entre **`r min(data$created_at, na.rm = TRUE)`** e **`r max(data$created_at, na.rm = TRUE)`**.
+
+## 🎯 Principais Indicadores
+
+```{r kpis, results='asis'}
+# Cálculo dos KPIs principais
+total_investment <- sum(data$cost_price, na.rm = TRUE)
+total_revenue <- sum(data$sale_price, na.rm = TRUE)
+total_profit <- total_revenue - total_investment
+overall_roi <- ifelse(total_investment > 0, (total_profit / total_investment) * 100, 0)
+
+unique_products <- length(unique(data$product_name))
+avg_cycle <- mean(data$growth_period_days[data$growth_period_days > 0], na.rm = TRUE)
+
+cat("
+<div style='display: flex; justify-content: space-around; margin: 20px 0;'>
+  <div style='text-align: center; padding: 15px; border-radius: 10px; background-color: #e8f5e8;'>
+    <h3 style='color: #2e7d32; margin: 0;'>💰 Investimento Total</h3>
+    <p style='font-size: 24px; font-weight: bold; margin: 5px 0; color: #1b5e20;'>R$ ", 
+    format(total_investment, big.mark = ".", decimal.mark = ",", nsmall = 2), "</p>
+  </div>
+  
+  <div style='text-align: center; padding: 15px; border-radius: 10px; background-color: #e3f2fd;'>
+    <h3 style='color: #1976d2; margin: 0;'>💵 Receita Total</h3>
+    <p style='font-size: 24px; font-weight: bold; margin: 5px 0; color: #0d47a1;'>R$ ", 
+    format(total_revenue, big.mark = ".", decimal.mark = ",", nsmall = 2), "</p>
+  </div>
+  
+  <div style='text-align: center; padding: 15px; border-radius: 10px; background-color: #f3e5f5;'>
+    <h3 style='color: #7b1fa2; margin: 0;'>📈 ROI Geral</h3>
+    <p style='font-size: 24px; font-weight: bold; margin: 5px 0; color: #4a148c;'>", 
+    round(overall_roi, 1), "%</p>
+  </div>
+  
+  <div style='text-align: center; padding: 15px; border-radius: 10px; background-color: #fff3e0;'>
+    <h3 style='color: #f57c00; margin: 0;'>🌱 Produtos</h3>
+    <p style='font-size: 24px; font-weight: bold; margin: 5px 0; color: #e65100;'>", 
+    unique_products, "</p>
+  </div>
+</div>
+")
+```
+
+---
+
+# 📊 Análise por Produto
+
+## Top Produtos por ROI
+
+```{r product-roi}
+product_analysis <- data %>%
+  filter(cost_price > 0, sale_price > 0) %>%
+  group_by(product_name) %>%
+  summarise(
+    quantidade_total = sum(quantity, na.rm = TRUE),
+    investimento_total = sum(cost_price, na.rm = TRUE),
+    receita_total = sum(sale_price, na.rm = TRUE),
+    lucro_total = receita_total - investimento_total,
+    roi_percent = (lucro_total / investimento_total) * 100,
+    producoes = n(),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(roi_percent))
+
+# Tabela dos top produtos
+top_products <- head(product_analysis, 10)
+
+datatable(
+  top_products %>% 
+    mutate(
+      investimento_total = paste0("R$ ", format(investimento_total, big.mark = ".", nsmall = 2)),
+      receita_total = paste0("R$ ", format(receita_total, big.mark = ".", nsmall = 2)),
+      lucro_total = paste0("R$ ", format(lucro_total, big.mark = ".", nsmall = 2)),
+      roi_percent = paste0(round(roi_percent, 1), "%"),
+      quantidade_total = format(quantidade_total, big.mark = ".")
+    ) %>%
+    select(
+      Produto = product_name,
+      Quantidade = quantidade_total,
+      Investimento = investimento_total,
+      Receita = receita_total,
+      Lucro = lucro_total,
+      ROI = roi_percent,
+      `Nº Produções` = producoes
+    ),
+  options = list(
+    pageLength = 10,
+    scrollX = TRUE,
+    language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Portuguese-Brasil.json')
+  ),
+  caption = "Tabela 1: Ranking de produtos por ROI"
+)
+```
+
+## Gráfico de ROI por Produto
+
+```{r roi-chart, fig.height=6}
+if (nrow(top_products) > 0) {
+  p <- ggplot(head(top_products, 8), aes(x = reorder(product_name, roi_percent), y = roi_percent)) +
+    geom_col(fill = "#2E8B57", alpha = 0.8) +
+    geom_text(aes(label = paste0(round(roi_percent, 1), "%")), 
+              hjust = -0.1, size = 3.5, fontface = "bold") +
+    coord_flip() +
+    labs(
+      title = "📈 ROI por Produto - Top 8",
+      subtitle = "Retorno sobre Investimento (%)",
+      x = "Produto",
+      y = "ROI (%)"
+    ) +
+    scale_y_continuous(labels = percent_format(scale = 1))
+  
+  print(p)
+}
+```
+
+---
+
+# 📈 Análise Temporal
+
+## Evolução Mensal de Receitas e Custos
+
+```{r temporal-analysis}
+temporal_data <- data %>%
+  filter(!is.na(harvest_date), sale_price > 0) %>%
+  mutate(year_month = floor_date(harvest_date, "month")) %>%
+  group_by(year_month) %>%
+  summarise(
+    receita_mensal = sum(sale_price, na.rm = TRUE),
+    custo_mensal = sum(cost_price, na.rm = TRUE),
+    lucro_mensal = receita_mensal - custo_mensal,
+    quantidade_mensal = sum(quantity, na.rm = TRUE),
+    roi_mensal = ifelse(custo_mensal > 0, (lucro_mensal / custo_mensal) * 100, 0),
+    .groups = 'drop'
+  ) %>%
+  arrange(year_month)
+
+if (nrow(temporal_data) > 0) {
+  # Tabela mensal
+  datatable(
+    temporal_data %>%
+      mutate(
+        Mês = format(year_month, "%B %Y"),
+        `Receita (R$)` = paste0("R$ ", format(receita_mensal, big.mark = ".", nsmall = 2)),
+        `Custo (R$)` = paste0("R$ ", format(custo_mensal, big.mark = ".", nsmall = 2)),
+        `Lucro (R$)` = paste0("R$ ", format(lucro_mensal, big.mark = ".", nsmall = 2)),
+        `ROI (%)` = paste0(round(roi_mensal, 1), "%"),
+        Quantidade = format(quantidade_mensal, big.mark = ".")
+      ) %>%
+      select(Mês, `Receita (R$)`, `Custo (R$)`, `Lucro (R$)`, `ROI (%)`, Quantidade),
+    options = list(
+      pageLength = 12,
+      scrollX = TRUE,
+      language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Portuguese-Brasil.json')
+    ),
+    caption = "Tabela 2: Performance mensal"
+  )
+}
+```
+
+```{r temporal-chart, fig.height=6}
+if (nrow(temporal_data) > 0) {
+  p <- ggplot(temporal_data, aes(x = year_month)) +
+    geom_line(aes(y = receita_mensal, color = "Receita"), size = 1.2) +
+    geom_line(aes(y = custo_mensal, color = "Custo"), size = 1.2) +
+    geom_point(aes(y = receita_mensal, color = "Receita"), size = 2) +
+    geom_point(aes(y = custo_mensal, color = "Custo"), size = 2) +
+    labs(
+      title = "💰 Evolução Temporal de Receita e Custo",
+      subtitle = "Valores mensais em R$",
+      x = "Mês",
+      y = "Valor (R$)",
+      color = "Tipo"
+    ) +
+    scale_color_manual(values = c("Receita" = "#2E8B57", "Custo" = "#DC143C")) +
+    scale_y_continuous(labels = label_number(prefix = "R$ ", big.mark = ".")) +
+    scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(p)
+}
+```
+
+---
+
+# ⚡ Análise de Eficiência
+
+## Eficiência de Produção por Produto
+
+```{r efficiency-analysis}
+efficiency_data <- data %>%
+  filter(cost_price > 0) %>%
+  group_by(product_name) %>%
+  summarise(
+    eficiencia_media = mean(production_efficiency, na.rm = TRUE),
+    quantidade_total = sum(quantity, na.rm = TRUE),
+    investimento_total = sum(cost_price, na.rm = TRUE),
+    roi_medio = mean(roi_percent, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(eficiencia_media))
+
+if (nrow(efficiency_data) > 0) {
+  datatable(
+    efficiency_data %>%
+      mutate(
+        Produto = product_name,
+        `Eficiência` = round(eficiencia_media, 3),
+        `Quantidade Total` = format(quantidade_total, big.mark = "."),
+        `Investimento (R$)` = paste0("R$ ", format(investimento_total, big.mark = ".", nsmall = 2)),
+        `ROI Médio (%)` = paste0(round(roi_medio, 1), "%")
+      ) %>%
+      select(Produto, `Eficiência`, `Quantidade Total`, `Investimento (R$)`, `ROI Médio (%)`),
+    options = list(
+      pageLength = 10,
+      scrollX = TRUE,
+      language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Portuguese-Brasil.json')
+    ),
+    caption = "Tabela 3: Eficiência de produção (unidades por R$ investido)"
+  )
+}
+```
+
+```{r efficiency-chart, fig.height=6}
+if (nrow(efficiency_data) > 0) {
+  p <- ggplot(head(efficiency_data, 8), aes(x = reorder(product_name, eficiencia_media), y = eficiencia_media)) +
+    geom_col(fill = "#4682B4", alpha = 0.8) +
+    geom_text(aes(label = round(eficiencia_media, 3)), 
+              hjust = -0.1, size = 3.5, fontface = "bold") +
+    coord_flip() +
+    labs(
+      title = "⚡ Eficiência de Produção por Produto",
+      subtitle = "Quantidade produzida por R$ investido",
+      x = "Produto",
+      y = "Eficiência (unidades/R$)"
+    )
+  
+  print(p)
+}
+```
+
+---
+
+# 🕐 Análise de Ciclo Produtivo
+
+```{r cycle-analysis}
+cycle_data <- data %>%
+  filter(!is.na(planting_date), !is.na(harvest_date), growth_period_days > 0) %>%
+  group_by(product_name) %>%
+  summarise(
+    ciclo_medio = mean(growth_period_days, na.rm = TRUE),
+    ciclo_min = min(growth_period_days, na.rm = TRUE),
+    ciclo_max = max(growth_period_days, na.rm = TRUE),
+    roi_medio = mean(roi_percent, na.rm = TRUE),
+    producoes_com_ciclo = n(),
+    .groups = 'drop'
+  ) %>%
+  arrange(ciclo_medio)
+
+if (nrow(cycle_data) > 0) {
+  datatable(
+    cycle_data %>%
+      mutate(
+        Produto = product_name,
+        `Ciclo Médio (dias)` = round(ciclo_medio, 1),
+        `Ciclo Mín (dias)` = ciclo_min,
+        `Ciclo Máx (dias)` = ciclo_max,
+        `ROI Médio (%)` = paste0(round(roi_medio, 1), "%"),
+        `Nº Ciclos` = producoes_com_ciclo
+      ) %>%
+      select(Produto, `Ciclo Médio (dias)`, `Ciclo Mín (dias)`, `Ciclo Máx (dias)`, `ROI Médio (%)`, `Nº Ciclos`),
+    options = list(
+      pageLength = 10,
+      scrollX = TRUE,
+      language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Portuguese-Brasil.json')
+    ),
+    caption = "Tabela 4: Análise de ciclo produtivo"
+  )
+  
+  # Gráfico de ciclo vs ROI
+  p <- ggplot(cycle_data, aes(x = ciclo_medio, y = roi_medio)) +
+    geom_point(aes(color = product_name), size = 4, alpha = 0.8) +
+    geom_text(aes(label = product_name), vjust = -1, hjust = 0.5, size = 3, fontface = "bold") +
+    labs(
+      title = "🕐 Ciclo de Produção x ROI",
+      subtitle = "Relação entre tempo de cultivo e retorno financeiro",
+      x = "Ciclo Médio (dias)",
+      y = "ROI Médio (%)"
+    ) +
+    scale_y_continuous(labels = percent_format(scale = 1)) +
+    theme(legend.position = "none")
+  
+  print(p)
+} else {
+  cat("**Dados de ciclo produtivo não disponíveis**\n\n")
+}
+```
+
+---
+
+# 📊 Status das Produções
+
+```{r status-analysis}
+status_data <- data %>%
+  count(production_status) %>%
+  mutate(
+    percentage = n / sum(n) * 100,
+    status_label = case_when(
+      production_status == "PLANTED" ~ "🌱 Plantado",
+      production_status == "HARVESTED" ~ "🌾 Colhido", 
+      production_status == "SOLD" ~ "💰 Vendido",
+      TRUE ~ production_status
+    )
+  )
+
+datatable(
+  status_data %>%
+    mutate(
+      Status = status_label,
+      Quantidade = n,
+      `Percentual (%)` = paste0(round(percentage, 1), "%")
+    ) %>%
+    select(Status, Quantidade, `Percentual (%)`),
+  options = list(
+    pageLength = 5,
+    language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Portuguese-Brasil.json')
+  ),
+  caption = "Tabela 5: Distribuição por status de produção"
+)
+
+# Gráfico de pizza
+colors <- c("#90EE90", "#FFD700", "#32CD32")
+
+p <- ggplot(status_data, aes(x = "", y = percentage, fill = status_label)) +
+  geom_col(width = 1) +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = paste0(round(percentage, 1), "%\n(", n, ")")), 
+            position = position_stack(vjust = 0.5), size = 4, fontface = "bold") +
+  labs(
+    title = "📊 Distribuição das Produções por Status",
+    fill = "Status"
+  ) +
+  scale_fill_manual(values = colors) +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank()
+  )
+
+print(p)
+```
+
+---
+
+# 🎯 Recomendações Estratégicas
+
+```{r recommendations, results='asis'}
+# Produto mais rentável
+best_product <- product_analysis[1, ]
+best_month <- if(nrow(temporal_data) > 0) temporal_data[which.max(temporal_data$roi_mensal), ] else NULL
+most_efficient <- efficiency_data[1, ]
+
+cat("
+## 🌟 Principais Achados
+
+### 💰 Produto Mais Rentável
+**", best_product$product_name, "** apresenta o melhor ROI com **", round(best_product$roi_percent, 1), "%** de retorno sobre investimento.
+
+- **Lucro Total:** R$ ", format(best_product$lucro_total, big.mark = ".", nsmall = 2), "
+- **Investimento:** R$ ", format(best_product$investimento_total, big.mark = ".", nsmall = 2), "
+- **Quantidade Produzida:** ", format(best_product$quantidade_total, big.mark = "."), " unidades
+")
+
+if (!is.null(best_month)) {
+  cat("
+### 📅 Melhor Período
+**", format(best_month$year_month, "%B de %Y"), "** foi o mês com melhor performance financeira.
+
+- **ROI do Período:** ", round(best_month$roi_mensal, 1), "%
+- **Lucro do Mês:** R$ ", format(best_month$lucro_mensal, big.mark = ".", nsmall = 2), "
+- **Receita Total:** R$ ", format(best_month$receita_mensal, big.mark = ".", nsmall = 2), "
+")
+}
+
+cat("
+### ⚡ Produto Mais Eficiente
+**", most_efficient$product_name, "** apresenta a melhor eficiência produtiva com **", round(most_efficient$eficiencia_media, 3), "** unidades por real investido.
+
+## 💡 Recomendações de Ação
+
+1. **Foque no produto mais rentável:** Considere expandir a produção de ", best_product$product_name, " devido ao seu alto ROI.
+
+2. **Otimize o timing:** ", ifelse(!is.null(best_month), paste("Planeje mais produções para colheita em", format(best_month$year_month, "%B")), "Analise a sazonalidade para otimizar épocas de plantio e colheita"), ".
+
+3. **Melhore a eficiência:** Estude as práticas utilizadas na produção de ", most_efficient$product_name, " para aplicar em outros produtos.
+
+4. **Monitore ciclos:** ", ifelse(nrow(cycle_data) > 0, 
+   paste("Produtos com ciclos mais curtos podem permitir múltiplas colheitas no ano."),
+   "Registre datas de plantio e colheita para análises futuras de ciclo produtivo."), "
+
+5. **Diversificação inteligente:** Mantenha um portfólio balanceado, mas priorize produtos com melhor ROI.
+")
+```
+
+---
+
+# 📋 Resumo dos Dados
+
+```{r summary-stats, results='asis'}
+cat("
+## 📊 Estatísticas Gerais
+
+- **Total de Registros:** ", nrow(data), "
+- **Produtos Únicos:** ", length(unique(data$product_name)), "
+- **Período de Análise:** ", as.character(min(data$created_at, na.rm = TRUE)), " a ", as.character(max(data$created_at, na.rm = TRUE)), "
+- **Investimento Total:** R$ ", format(total_investment, big.mark = ".", decimal.mark = ",", nsmall = 2), "
+- **Receita Total:** R$ ", format(total_revenue, big.mark = ".", decimal.mark = ",", nsmall = 2), "
+- **Lucro Total:** R$ ", format(total_profit, big.mark = ".", decimal.mark = ",", nsmall = 2), "
+- **ROI Geral:** ", round(overall_roi, 2), "%
+
+## 🎉 Conclusão
+
+Este relatório apresentou uma análise detalhada da produção agrícola, identificando oportunidades de otimização e crescimento. Os dados mostram que há potencial para melhorar a rentabilidade através do foco em produtos de alto ROI e do planejamento estratégico dos ciclos produtivos.
+
+Para manter este sistema atualizado, continue registrando todas as atividades de produção através do sistema CLI e execute regularmente as análises para acompanhar a evolução dos indicadores.
+
+---
+
+*Relatório gerado automaticamente pelo Sistema de Gestão de Produção Agrícola*  
+*Data de geração: ", format(Sys.time(), "%d/%m/%Y às %H:%M"), "*
+")
+```

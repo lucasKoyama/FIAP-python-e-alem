@@ -179,14 +179,20 @@ def read_agricultural_production_by_id(record_id: int) -> Optional[Dict]:
         connection.close()
 
 
-def update_agricultural_production(record_id: int, **kwargs) -> bool:
+def update_agricultural_production(
+    record_id: int,
+    product_name: str = None,
+    quantity: float = None,
+    sale_price: float = None,
+    cost_price: float = None,
+    production_status: str = None,
+) -> bool:
     """
     Update an agricultural production record
 
     Args:
         record_id: ID of the record to update
-        **kwargs: Fields to update (product_name, quantity, sale_price,
-                 cost_price, planting_date, harvest_date, production_status)
+        product_name, quantity, sale_price, cost_price, production_status: Fields to update
 
     Returns:
         bool: True if successful, False otherwise
@@ -199,21 +205,20 @@ def update_agricultural_production(record_id: int, **kwargs) -> bool:
         cursor = connection.cursor()
 
         # Build dynamic update query based on provided fields
-        valid_fields = [
-            "product_name",
-            "quantity",
-            "sale_price",
-            "cost_price",
-            "planting_date",
-            "harvest_date",
-            "production_status",
-        ]
-
         update_fields = []
         values = []
 
-        for field, value in kwargs.items():
-            if field in valid_fields:
+        # Create kwargs from local variables
+        local_vars = {
+            "product_name": product_name,
+            "quantity": quantity,
+            "sale_price": sale_price,
+            "cost_price": cost_price,
+            "production_status": production_status,
+        }
+
+        for field, value in local_vars.items():
+            if value is not None:
                 update_fields.append(f"{field} = :{len(values) + 1}")
 
                 # Handle date conversion
