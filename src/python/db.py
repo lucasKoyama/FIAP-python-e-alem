@@ -1,4 +1,4 @@
-import cx_Oracle
+import oracledb
 from datetime import datetime
 from typing import List, Dict, Optional
 
@@ -8,17 +8,15 @@ DB_CONFIG = {
     "port": 1521,
     "sid": "ORCL",
     "username": "rm566925",
-    "password": "DtNasc#030700",
+    "password": "fiap25",
 }
 
 
 def get_connection():
     """Get database connection"""
     try:
-        dsn = cx_Oracle.makedsn(
-            DB_CONFIG["host"], DB_CONFIG["port"], sid=DB_CONFIG["sid"]
-        )
-        connection = cx_Oracle.connect(
+        dsn = f"{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['sid']}"
+        connection = oracledb.connect(
             user=DB_CONFIG["username"], password=DB_CONFIG["password"], dsn=dsn
         )
         return connection
