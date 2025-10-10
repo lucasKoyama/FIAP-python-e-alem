@@ -7,8 +7,6 @@ Usado para criar dados de exemplo e testar o sistema
 import sys
 import os
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "src", "python"))
-
 import db
 from datetime import datetime, timedelta
 import random
