@@ -6,10 +6,14 @@ Usado para criar dados de exemplo e testar o sistema
 
 import sys
 import os
-
-import db
 from datetime import datetime, timedelta
 import random
+
+# Adiciona o caminho do módulo Python ao path
+sys.path.append(os.path.join(os.path.dirname(__file__), "src", "python"))
+
+# Agora pode importar o módulo db
+import db
 
 
 def create_sample_data():
@@ -119,7 +123,6 @@ def run_export_test():
     print("=" * 30)
 
     try:
-        sys.path.append(os.path.join(os.path.dirname(__file__), "src", "python"))
         import export_csv
 
         if export_csv.export_to_csv("test_export.csv"):
