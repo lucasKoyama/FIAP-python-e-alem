@@ -289,30 +289,31 @@ def gerar_relatorios():
     r_executable = None
     possible_r_paths = [
         r"C:\Program Files\R\R-4.5.1\bin\Rscript.exe",
-        r"C:\Program Files\R\R-4.4.1\bin\Rscript.exe", 
+        r"C:\Program Files\R\R-4.4.1\bin\Rscript.exe",
         r"C:\Program Files\R\R-4.3.1\bin\Rscript.exe",
-        "Rscript"  # Tenta no PATH
+        "Rscript",  # Tenta no PATH
     ]
-    
+
     for rscript_path in possible_r_paths:
         try:
-            result = subprocess.run([rscript_path, "--version"], 
-                                  capture_output=True, text=True, timeout=5)
+            result = subprocess.run(
+                [rscript_path, "--version"], capture_output=True, text=True, timeout=5
+            )
             if result.returncode == 0:
                 r_executable = rscript_path
                 print(f"✅ R encontrado em: {rscript_path}")
                 break
         except (subprocess.TimeoutExpired, FileNotFoundError):
             continue
-    
+
     if not r_executable:
         print("❌ R não encontrado!")
         print("💡 Opções:")
         print("   1. Adicione R ao PATH seguindo as instruções")
         print("   2. Use análise Python alternativa")
-        
+
         usar_python = input("\nUsar análise Python básica? (s/N): ").strip().lower()
-        if usar_python in ['s', 'sim', 'y', 'yes']:
+        if usar_python in ["s", "sim", "y", "yes"]:
             gerar_analise_python()
         return
 
@@ -320,7 +321,7 @@ def gerar_relatorios():
 
     print("Opções de relatório:")
     print("1. 📊 Análise quantitativa")
-    print("2. 📈 Gráficos e visualizações") 
+    print("2. 📈 Gráficos e visualizações")
     print("3. 📋 Relatório completo (PDF)")
     print("4. 📊 Análise Python (alternativa)")
 
@@ -344,7 +345,7 @@ def gerar_relatorios():
                 check=True,
             )
             print("✅ Relatório PDF gerado!")
-            
+
         elif choice == "4":
             gerar_analise_python()
 
@@ -362,91 +363,99 @@ def gerar_relatorios():
 def gerar_analise_python():
     """Gera análise básica em Python (alternativa ao R)"""
     print("🔄 Executando análise quantitativa em Python...")
-    
+
     try:
         # Busca todos os dados
         productions = db.read_all_agricultural_production()
-        
+
         if not productions:
             print("❌ Nenhum dado encontrado para análise!")
             return
-        
+
         print(f"\n📊 ANÁLISE QUANTITATIVA - {len(productions)} registros")
-        print("="*50)
-        
+        print("=" * 50)
+
         # 1. Análise Financeira Geral
-        total_investment = sum(p['cost_price'] for p in productions)
-        total_revenue = sum(p['sale_price'] for p in productions if p['sale_price'])
+        total_investment = sum(p["cost_price"] for p in productions)
+        total_revenue = sum(p["sale_price"] for p in productions if p["sale_price"])
         total_profit = total_revenue - total_investment
-        overall_roi = (total_profit / total_investment * 100) if total_investment > 0 else 0
-        
+        overall_roi = (
+            (total_profit / total_investment * 100) if total_investment > 0 else 0
+        )
+
         print("\n💰 RESUMO FINANCEIRO:")
         print(f"Investimento Total: R$ {total_investment:,.2f}")
         print(f"Receita Total: R$ {total_revenue:,.2f}")
         print(f"Lucro Total: R$ {total_profit:,.2f}")
         print(f"ROI Geral: {overall_roi:.1f}%")
-        
+
         # 2. Análise por Produto
         print("\n🌱 ANÁLISE POR PRODUTO:")
         product_stats = {}
-        
+
         for prod in productions:
-            name = prod['product_name']
+            name = prod["product_name"]
             if name not in product_stats:
                 product_stats[name] = {
-                    'quantidade': 0,
-                    'investimento': 0,
-                    'receita': 0,
-                    'count': 0
+                    "quantidade": 0,
+                    "investimento": 0,
+                    "receita": 0,
+                    "count": 0,
                 }
-            
-            product_stats[name]['quantidade'] += prod['quantity']
-            product_stats[name]['investimento'] += prod['cost_price']
-            product_stats[name]['receita'] += prod['sale_price'] or 0
-            product_stats[name]['count'] += 1
-        
+
+            product_stats[name]["quantidade"] += prod["quantity"]
+            product_stats[name]["investimento"] += prod["cost_price"]
+            product_stats[name]["receita"] += prod["sale_price"] or 0
+            product_stats[name]["count"] += 1
+
         # Top 5 produtos por ROI
         product_roi = []
         for name, stats in product_stats.items():
-            if stats['investimento'] > 0:
-                lucro = stats['receita'] - stats['investimento']
-                roi = (lucro / stats['investimento']) * 100
-                product_roi.append((name, roi, lucro, stats['quantidade']))
-        
+            if stats["investimento"] > 0:
+                lucro = stats["receita"] - stats["investimento"]
+                roi = (lucro / stats["investimento"]) * 100
+                product_roi.append((name, roi, lucro, stats["quantidade"]))
+
         product_roi.sort(key=lambda x: x[1], reverse=True)
-        
+
         print("\n🏆 TOP 5 PRODUTOS POR ROI:")
         for i, (name, roi, lucro, quantidade) in enumerate(product_roi[:5], 1):
-            print(f"{i}. {name}: {roi:.1f}% ROI (Lucro: R$ {lucro:.2f}, Qtd: {quantidade:.1f})")
-        
+            print(
+                f"{i}. {name}: {roi:.1f}% ROI (Lucro: R$ {lucro:.2f}, Qtd: {quantidade:.1f})"
+            )
+
         # 3. Análise de Status
         print("\n📊 STATUS DAS PRODUÇÕES:")
         status_count = {}
         for prod in productions:
-            status = prod['production_status']
+            status = prod["production_status"]
             status_count[status] = status_count.get(status, 0) + 1
-        
+
         for status, count in status_count.items():
             percentage = (count / len(productions)) * 100
-            status_name = {"PLANTED": "🌱 Plantado", "HARVESTED": "🌾 Colhido", "SOLD": "💰 Vendido"}.get(status, status)
+            status_name = {
+                "PLANTED": "🌱 Plantado",
+                "HARVESTED": "🌾 Colhido",
+                "SOLD": "💰 Vendido",
+            }.get(status, status)
             print(f"{status_name}: {count} ({percentage:.1f}%)")
-        
+
         # 4. Produtos Mais Eficientes
         print("\n⚡ PRODUTOS MAIS EFICIENTES (quantidade/investimento):")
         efficiency_list = []
         for name, stats in product_stats.items():
-            if stats['investimento'] > 0:
-                efficiency = stats['quantidade'] / stats['investimento']
+            if stats["investimento"] > 0:
+                efficiency = stats["quantidade"] / stats["investimento"]
                 efficiency_list.append((name, efficiency))
-        
+
         efficiency_list.sort(key=lambda x: x[1], reverse=True)
-        
+
         for i, (name, eff) in enumerate(efficiency_list[:5], 1):
             print(f"{i}. {name}: {eff:.3f} unidades/R$")
-        
+
         print("\n✅ Análise Python concluída!")
         print("💡 Para análises mais avançadas, configure o R no PATH")
-        
+
     except Exception as e:
         print(f"❌ Erro na análise: {e}")
 
