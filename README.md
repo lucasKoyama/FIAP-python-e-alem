@@ -26,9 +26,8 @@ README.md
 ### Pré-requisitos
 
 1. **Python 3.8+** instalado
-2. **R 4.0+** instalado
-3. **Oracle Database** acessível (FIAP)
-4. **Bibliotecas Python:**
+2. **Oracle Database** acessível (FIAP)
+3. **Bibliotecas Python:**
    ```bash
    pip install oracledb
    ```
