@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Módulo para exportar dados da produção agrícola para formato CSV
-Para análise posterior em R
 """
 
 import csv
