@@ -13,6 +13,8 @@ A aplicação foi desenvolvida em Python, integrando coleta de dados, armazename
 README.md
 ```
 
+[video explicativo do projeto](https://youtu.be/6PdlNmKSkL0)
+
 ## ✅ Status do Projeto
 
 - [x] **Modelagem do banco de dados** - Tabela `agricultural_production` com todos os campos necessários
